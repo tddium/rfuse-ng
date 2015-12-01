@@ -12,36 +12,37 @@ struct intern_fuse *intern_fuse_new() {
   return inf;
 }
 
+
 int intern_fuse_destroy(struct intern_fuse *inf){
   //you have to take care, that fuse is unmounted yourself!
   if(inf->fuse)
     fuse_destroy(inf->fuse);
+  if(inf->mountpoint)
+     free(inf->mountpoint);
   free(inf);
   return 0;
 }
 
-int intern_fuse_init(
-  struct intern_fuse *inf,
-  const char *mountpoint, 
-  struct fuse_args *kernelopts,
-  struct fuse_args *libopts)
+int intern_fuse_init(struct intern_fuse *inf, struct fuse_args *args, void* user_data)
 {
   struct fuse_chan* fc;
-
-  fc = fuse_mount(mountpoint, kernelopts);
+  char* mountpoint;
+  mountpoint = inf->mountpoint;
+  fc = fuse_mount(mountpoint,args);
 
   if (fc == NULL) {
     return -1;
   }
 
-  inf->fuse=fuse_new(fc, libopts, &(inf->fuse_op), sizeof(struct fuse_operations), NULL);
-  inf->fc = fc;
+  inf->fuse=fuse_new(fc, args, &(inf->fuse_op), sizeof(struct fuse_operations), user_data);
 
-  if (strlen(inf->mountname) > MOUNTNAME_MAX) {
-    return -1;
+  if (inf->fuse == NULL) {
+      fuse_unmount(inf->mountpoint, fc);
+      return -1;
   }
 
-  strncpy(inf->mountname, mountpoint, MOUNTNAME_MAX);
+  inf->fc = fc;
+
   return 0;
 }
 
@@ -52,23 +53,22 @@ int intern_fuse_fd(struct intern_fuse *inf)
      return -1;
    }
 
-  struct fuse_chan *fc = inf->fc;
-  return fuse_chan_fd(fc);
+  return fuse_chan_fd(inf->fc);
 }
 
 //Process one fuse command (ie after IO.select)
 int intern_fuse_process(struct intern_fuse *inf)
 {
+  struct fuse_cmd *cmd;
+
   if (inf->fuse == NULL) {
     return -1;
   }
-
 
   if (fuse_exited(inf->fuse)) {
     return -1;
   }
 
-  struct fuse_cmd *cmd;
   cmd = fuse_read_cmd(inf->fuse);
 
   if (cmd != NULL) {

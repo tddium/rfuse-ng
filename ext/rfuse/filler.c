@@ -6,6 +6,9 @@ VALUE rfiller_initialize(VALUE self){
   return self;
 }
 
+/*
+* @private Never called
+*/
 VALUE rfiller_new(VALUE class){
   VALUE self;
   struct filler_t *f;
@@ -13,37 +16,46 @@ VALUE rfiller_new(VALUE class){
   return self;
 }
 
+/*
+ * Add a value into the filler 
+ * @param [String] name a file name
+ * @param [Stat] stat Stat info representing the file, may be nil
+ * @param [Integer] offset index of next entry, or zero
+ * 
+ * @return self or nil if the buffer is full
+ * 
+ */
 VALUE rfiller_push(VALUE self, VALUE name, VALUE stat, VALUE offset) {
   struct filler_t *f;
+  int result;
+  
   Data_Get_Struct(self,struct filler_t,f);
+
+
   //Allow nil return instead of a stat
   if (NIL_P(stat)) {
-    f->filler(f->buffer,STR2CSTR(name),NULL,NUM2LONG(offset));
+    result = f->filler(f->buffer,StringValueCStr(name),NULL,NUM2OFFT(offset));
   } else {
     struct stat st;
     memset(&st, 0, sizeof(st));
     rstat2stat(stat,&st);
-    f->filler(f->buffer,STR2CSTR(name),&st,NUM2LONG(offset));
+    result = f->filler(f->buffer,StringValueCStr(name),&st,NUM2OFFT(offset));
   }
-  return self;
+
+  return result ? Qnil : self;
 }
 
-VALUE rfiller_push_old(VALUE self, VALUE name, VALUE type, VALUE inode) {
-  printf("Called rfilter_push_old\n");
-  struct filler_t *f;
-  Data_Get_Struct(self,struct filler_t,f);
-  // TODO: architecture dependent int types
-  printf("Before df\n");
-  f->df(f->dh, STR2CSTR(name), NUM2INT(type), NUM2INT(inode));
-  printf("After df\n");
-  return self;
-}
+/*
+* Document-class: RFuse::Filler
+* Used by {Fuse#readdir} to collect directory entries
+*/
+void rfiller_init(VALUE module) {
 
-VALUE rfiller_init(VALUE module) {
+#if 0
+  module = rb_define_module("RFuse");
+#endif
   VALUE cFiller=rb_define_class_under(module,"Filler",rb_cObject);
   rb_define_alloc_func(cFiller,rfiller_new);
   rb_define_method(cFiller,"initialize",rfiller_initialize,0);
   rb_define_method(cFiller,"push",rfiller_push,3);
-  rb_define_method(cFiller,"push_old",rfiller_push_old,3);
-  return cFiller;
 }
